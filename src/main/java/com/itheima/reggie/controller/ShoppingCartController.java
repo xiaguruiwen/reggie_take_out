@@ -7,6 +7,7 @@ import com.itheima.reggie.entity.ShoppingCart;
 import com.itheima.reggie.service.ShoppingCartService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -29,7 +30,7 @@ public class ShoppingCartController {
      * @return
      */
     @PostMapping("/add")
-    private R<ShoppingCart> add(@RequestBody ShoppingCart shoppingCart){
+    public R<ShoppingCart> add(@RequestBody ShoppingCart shoppingCart){
 
         //设置用户id，指定当前是哪个用户的购物车数据
         Long currentId = BaseContext.getCurrentId();
@@ -85,12 +86,56 @@ public class ShoppingCartController {
      * @return
      */
     @DeleteMapping("/clean")
-    private R<String> clean(){
-        LambdaQueryWrapper<ShoppingCart> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(ShoppingCart::getUserId,BaseContext.getCurrentId());
-
-        shoppingCartService.remove(queryWrapper);
-
+    public R<String> clean(){
+        shoppingCartService.cleanShopping();
         return R.success("清空购物车成功");
+    }
+
+    /**
+     * 减少购物车菜品数量
+     * @return
+     */
+    @Transactional
+    @PostMapping("/sub")
+    public R<ShoppingCart> sub(@RequestBody ShoppingCart shoppingCart){
+        //设置用户id，指定当前是哪个用户的购物车数据
+        Long currentId = BaseContext.getCurrentId();
+        shoppingCart.setUserId(currentId);
+
+        Long dishId = shoppingCart.getDishId();
+        LambdaQueryWrapper<ShoppingCart> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(ShoppingCart::getUserId,currentId);
+        if(dishId != null){
+            //说明减少的是菜品数
+            queryWrapper.eq(ShoppingCart::getDishId,dishId);
+            ShoppingCart cart = shoppingCartService.getOne(queryWrapper);
+            cart.setNumber(cart.getNumber() - 1);
+            Integer number = cart.getNumber();
+            if (number > 0){
+                shoppingCartService.updateById(cart);
+            }else if(number == 0){
+                shoppingCartService.removeById(cart.getId());
+            }else {
+                return R.error("操作异常");
+            }
+            return R.success(cart);
+        }
+        Long setmealId = shoppingCart.getSetmealId();
+        if (setmealId != null){
+            //说明减少的是套餐数
+            queryWrapper.eq(ShoppingCart::getSetmealId,setmealId);
+            ShoppingCart cart = shoppingCartService.getOne(queryWrapper);
+            cart.setNumber(cart.getNumber() - 1);
+            Integer number = cart.getNumber();
+            if (number > 0){
+                shoppingCartService.updateById(cart);
+            }else if(number == 0){
+                shoppingCartService.removeById(cart.getId());
+            }else {
+                return R.error("操作异常");
+            }
+            return R.success(cart);
+        }
+        return R.error("操作异常");
     }
 }
